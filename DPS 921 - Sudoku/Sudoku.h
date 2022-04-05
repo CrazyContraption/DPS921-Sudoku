@@ -302,10 +302,24 @@ public:
 	/// <returns>Boolean denoting if the board is solvable. Failed attemps return false upon realization of an impossible outcome (multiple or no solutions).</returns>
 	/// </summary>
 	bool solveBoard() {
-
-		// Unimplemented as this requires solving functions and capabilities that I was too lazy to code with the rest of this headache.
-		// TODO: Jaron I leave this to you!
-
-		return isBoardSolved();
+		for (int row = 0; row < 9; row++) {
+			for (int col = 0; col < 9; col++) {
+				if (m_Board[row][col] != '-') {
+					return true;
+				}
+				for (int number = 1; number < 10; number++) {
+					if (checkIfSafe(row, col, number)) {
+						m_Board[row][col] = number;
+						if (solveBoard()) {
+							return true;
+						}
+						else {
+							m_Board[row][col] = '-';
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 };
