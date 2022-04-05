@@ -285,15 +285,51 @@ public:
 	/// </summary>
 	bool isBoardValid() {
 
-		bool isValid = true;
+		bool isValid = false;
+		bool colValid = false;
+		bool rowValid = false;
+		int rowArray[N];
+		int colArray[N];
+		int colNumber = 0;
+		int rowNumber = 0;
 
-		for (size_t row_index = 0; row_index < N && isValid; row_index++)
-			for (size_t col_index = 0; col_index < N && isValid; col_index++)
-				isValid = checkIfSafe(row_index, col_index, m_Board[row_index][col_index]);
 
-		// TODO: Validate if the board is solvable.
-		// THIS MUST BE DONE WITH A SOLVING ALGORITHM. I LEAVE THIS TO YOU JARON! :)
+		for (int row_fill = 0; row_fill < 9; row_fill++) {
+			rowNumber = row_fill;
+			for (int col_fill = 0; col_fill < 9; col_fill++) {
+				colArray[col_fill] = m_Board[row_fill][col_fill];
+			}
 
+			for (int row_check = 0; row_check < 9; row_check++) {
+				for (int col_check = 0; col_check < 9; col_check++) {
+					if (row_check != rowNumber) {
+						if (colArray[col_check] == m_Board[row_check][col_check])
+							colValid = false;
+						else
+							colValid = true;
+					}
+				}
+			}
+		}
+
+		for (int col_fill = 0; col_fill < 9; col_fill++) {
+			colNumber = col_fill;
+			for (int row_fill = 0; row_fill < 9; row_fill++) {
+				rowArray[row_fill] = m_Board[col_fill][row_fill];
+			}
+
+			for (int col_check = 0; col_check < 9; col_check++) {
+				for (int row_check = 0; row_check < 9; row_check++) {
+					if (col_check != colNumber) {
+						if (rowArray[row_check] == m_Board[col_check][row_check])
+							rowValid = false;
+						else
+							rowValid = true;
+					}
+				}
+			}
+		}
+		if (colValid && rowValid) isValid = true;
 		return isValid;
 	}
 
@@ -304,7 +340,7 @@ public:
 	bool solveBoard() {
 		for (int row = 0; row < 9; row++) {
 			for (int col = 0; col < 9; col++) {
-				if (m_Board[row][col] != '-') {
+				if (m_Board[row][col] != 0) {
 					return true;
 				}
 				for (int number = 1; number < 10; number++) {
