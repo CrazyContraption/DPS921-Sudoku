@@ -448,8 +448,10 @@ public:
 		int counter = 0;
 		while (!isBoardSolved() && counter < N * (N + 1)) { // Retry for as long as the board isn't solved, and we've tried less than 9*(9 + 1) times.
 
-			for (short numeral = 1; numeral <= 9; numeral++) { // For each number from 1 through 9...
-				for (short box = 0; box <= 8; box++) { // For each segment...
+			bool flag = false;
+
+			for (short box = 0; box <= 8 && !flag; box++) { // For each segment...
+				for (short numeral = 1; numeral <= 9 && !flag; numeral++) { // For each number from 1 through 9...
 
 					if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
 						continue; // Skip this segment, move to the next.
@@ -501,20 +503,28 @@ public:
 							} // End column loop
 						} // End row loop
 
-						if (countValid == 0) // No valid spots for this number in the segment...?
-							return false; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+						if (countValid == 0) { // No valid spots for this number in the segment...?
+							flag = true; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+							box = -1;
+							numeral = N + 1;
+							break; // ABORT MISSION
+						}
 
 						if (countValid == 1) { // Did we find only one valid spot for this numeral...?
 							m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
 							wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
 							print(); // Print out the updates
 							box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
+							numeral = N + 1;
 							break; // Break out of the cell index loop to reach the box loop
 						} else // Multiple valid cells...?
 							continue; // We've already made a note of them all... there's nothing more we can do here... :(
 					}
 				} // End segment loop
 			} // End numeral loop
+
+			if (flag)
+				return false;
 
 			// Scan for cells with only a single note
 			for (short l_col = 0; l_col < N; l_col++) {
