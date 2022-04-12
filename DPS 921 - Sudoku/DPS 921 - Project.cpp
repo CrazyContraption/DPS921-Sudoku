@@ -57,7 +57,8 @@ int main(int argc, char* argv[]) {
         << std::endl
         << "  Level:  " << difficulty << std::endl
         << "  Timer:  " << timer.getDuration() << "ms" << std::endl
-        << "  Seed:   " << seed << std::endl;
+        << "  Seed:   " << seed << std::endl
+        << "  Solved in:   " << argv[3] << std::endl;
 
     if (solved && boardValid && valid)
         return 0; // Board was solved, and is valid. Hurray!
