@@ -20,12 +20,13 @@ int main(int argc, char* argv[]) {
     if (argc != 4) {
         std::cerr
             << "Invalid number of arugments: Expected 3, got " + argc - 1 << std::endl
-            << "Expected syntax: " << argv[0] << " seed(int, -1 for random) difficulty(int, 0-20) solver_type(serial,OMP)" << std::endl;
+            << "Expected syntax: " << argv[0] << " seed(int, -1 for random) difficulty(int, 0-20) threads(0:serial 1+: OMP)" << std::endl;
         return 1;
     }
 
     int seed = atoi(argv[1]);
     int difficulty = atoi(argv[2]);
+    int threads = atoi(argv[3]);
     bool boardValid = false;
 
     // TODO: Args stuff for seed + difficulty
@@ -38,10 +39,10 @@ int main(int argc, char* argv[]) {
     
     Timer timer = Timer();
     timer.start();
-    if (std::strcmp(argv[3], "serial") == 0) {
-        boardValid = myGame.solveBoardSerial();
-    } else if (std::strcmp(argv[3], "OMP") == 0) {
-        boardValid = myGame.solveBoardOMP();
+    if (threads < 1) {
+        boardValid = myGame.solveNotationSerial();
+    } else {
+        boardValid = myGame.solveNotationOMP(threads);
     }
     timer.stop();
 
@@ -54,11 +55,15 @@ int main(int argc, char* argv[]) {
         << "  Solvable:  " << (boardValid ? "YES" : "NOT ENOUGH INFORMATION") << std::endl
         << "  Status:    " << (solved ? "Done" : "Unsolved") << std::endl
         << "  Valid:     " << (valid ? "YES" : "NO") << std::endl
-        << std::endl
+        << std::endl;
+    if (threads < 1)
+        std::cout << "  Method:  Serial" << std::endl;
+    else
+        std::cout << "  Method:  OMP - " << threads << " thread" << (threads > 1 ? "s" : "") << std::endl;
+    std::cout << std::endl
         << "  Level:  " << difficulty << std::endl
         << "  Timer:  " << timer.getDuration() << "ms" << std::endl
-        << "  Seed:   " << seed << std::endl
-        << "  Solved in:   " << argv[3] << std::endl;
+        << "  Seed:   " << seed << std::endl;
 
     if (solved && boardValid && valid)
         return 0; // Board was solved, and is valid. Hurray!

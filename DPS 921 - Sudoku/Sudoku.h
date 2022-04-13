@@ -26,10 +26,11 @@ struct Cell {
 	short onlyNote() { // Gives the only valid numeral note if one, -1 if none are valid, 0 if multiple notes are valid
 		short noteIndex = -1;
 		for (short index = 0; index < N; index++)
-			if (canBe[index] == true && noteIndex <= -1)
-				noteIndex = index;
-			else
-				return 0;
+			if (canBe[index] == true)
+				if (noteIndex <= -1)
+					noteIndex = index + 1;
+				else if (noteIndex >= 1)
+					return 0;
 		return noteIndex;
 	}
 
@@ -443,16 +444,18 @@ public:
 	/// <para>Solves iteratively to determine if a board can be solved, and if so - how?</para>
 	/// <returns>Boolean denoting if the board is solvable. Failed attemps return false upon realization of an impossible outcome (multiple or no solutions). No solution boards will have empty cells with no notes in them (cell with no value, or possible values)</returns>
 	/// </summary>
-	bool solveBoardSerial() {
+	bool solveNotationSerial() {
 
-		// This counter ensures we don't get stuck trying to solve an impossible sudoku forever
-		int counter = 0;
-		while (!isBoardSolved() && counter < N * (N + 1)) { // Retry for as long as the board isn't solved, and we've tried less than 9*(9 + 1) times.
+		short state = (isBoardSolved() ? 1 : 0); // 0 = in progress, 1 = complete, 2 = invalid
+			
+		for (int iteration = 0; iteration < N * N && state == 0; iteration++, state = (isBoardSolved() ? 1 : 0)) {
 
-			bool flag = false;
+			if (state > 0)
+				return state == 1 ? true : false;
 
-			for (short box = 0; box <= 8 && !flag; box++) { // For each segment...
-				for (short numeral = 1; numeral <= 9 && !flag; numeral++) { // For each number from 1 through 9...
+			//flag = false;
+			for (short box = 0; box < N && state <= 0; box += 1) { // For each segment...
+				for (short numeral = 1; numeral <= N && state <= 0; numeral++) { // For each number from 1 through 9...
 
 					if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
 						continue; // Skip this segment, move to the next.
@@ -505,7 +508,7 @@ public:
 						} // End row loop
 
 						if (countValid == 0) { // No valid spots for this number in the segment...?
-							flag = true; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+							state = 2; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
 							box = -1;
 							numeral = N + 1;
 							break; // ABORT MISSION
@@ -514,61 +517,76 @@ public:
 						if (countValid == 1) { // Did we find only one valid spot for this numeral...?
 							m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
 							wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
-							//print(); // Print out the updates
+							print(); // Print out the updates
 							box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
 							numeral = N + 1;
 							break; // Break out of the cell index loop to reach the box loop
-						} else // Multiple valid cells...?
+						}
+						else // Multiple valid cells...?
 							continue; // We've already made a note of them all... there's nothing more we can do here... :(
 					}
 				} // End segment loop
 			} // End numeral loop
 
-			if (flag)
-				return false;
+			if (state > 0)
+				return state == 1 ? true : false;
 
 			// Scan for cells with only a single note
-			for (short l_col = 0; l_col < N; l_col++) {
-				for (short l_row = 0; l_row < N; l_row++) {
-
+			state = (isBoardSolved() ? 1 : 0);
+			for (short l_col = 0; l_col < N && state <= 0; l_col++) {
+				for (short l_row = 0; l_row < N && state <= 0; l_row++) {
+					if (m_Board[l_col][l_row] > 0)
+						continue;
 					short numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
+					if (numeral == 0) {
+						for (short index = 0; index < N; index++)
+							if (m_Board[l_col][l_row].canBe[index] == true)
+								m_Board[l_col][l_row].canBe[index] = checkIfSafe(l_col, l_row, index + 1);
+							else
+								m_Board[l_col][l_row].canBe[index] = false;
+						numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
+					}
 					if (numeral > 0) {
 						m_Board[l_col][l_row] = numeral;
 						wipeNotations(l_col, l_row, numeral);
-						print();
+						print(); // Print out the updates
 					}
 				}
 			}
 
-			// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
+			if (state > 0)
+				return state == 1 ? true : false;
 
-			counter++;
+			// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
 		}
-		return counter < N* (N + 1);
+
+		return state == 1 ? true : false;
 	}
 
 	/// <summary>Uses OMP parallel operations to solve the board by filling in any empty cells
 	/// <para>Same a serial, but much faster (hopefully)</para>
 	/// <returns>Boolean denoting if the board is solvable. Failed attemps return false upon realization of an impossible outcome (multiple or no solutions).</returns>
 	/// </summary>
-	bool solveBoardOMP() {
+	bool solveNotationOMP(int nthreads) {
 
-		omp_set_num_threads(8);
+		short state = 0; // 0 = in progress, 1 = complete, 2 = invalid
 
-		// This counter ensures we don't get stuck trying to solve an impossible sudoku forever
-		int counter = 0;
-		while (!isBoardSolved() && counter < N * (N + 1)) { // Retry for as long as the board isn't solved, and we've tried less than 9*(9 + 1) times.
+		for (int iteration = 0; iteration < N * N && state == 0; iteration++, state = (isBoardSolved() ? 1 : 0)) {
 
-			bool flag = false;
+			omp_set_num_threads(nthreads);
+			if (state > 0)
+				return state == 1 ? true : false;
 
 #pragma omp parallel
 			{
-				int master = 0;
-				int threadNumber = omp_get_thread_num();
+				int threadID = omp_get_thread_num();
 
-#pragma omp for
-				for (short box = 0; box <= 8; box++) { // For each segment...
-					for (short numeral = 1; numeral <= 9 && !flag; numeral++) { // For each number from 1 through 9...
+				if (threadID == 0)
+					state = (isBoardSolved() ? 1 : 0);
+
+				//flag = false;
+				for (short box = 0; box < N && state <= 0; box += 1) { // For each segment...
+					for (short numeral = threadID + 1; numeral <= N && state <= 0; numeral += nthreads) { // For each number from 1 through 9...
 
 						if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
 							continue; // Skip this segment, move to the next.
@@ -614,14 +632,14 @@ public:
 
 										m_Board[lastValidCol][lastValidRow].note(numeral); // Add a note to this cell, letting the board remember that this numeral is possible for this position
 
-										/// print(); // ENABLES "SLOWMODE"
+										//if (threadID == 0) print(); // Print out the updates
 									}
 
 								} // End column loop
 							} // End row loop
 
 							if (countValid == 0) { // No valid spots for this number in the segment...?
-								flag = true; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+								state = 2; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
 								box = -1;
 								numeral = N + 1;
 								break; // ABORT MISSION
@@ -630,7 +648,7 @@ public:
 							if (countValid == 1) { // Did we find only one valid spot for this numeral...?
 								m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
 								wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
-								//if(threadNumber == master) print(); // Print out the updates
+								if (threadID == 0) print(); // Print out the updates
 								box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
 								numeral = N + 1;
 								break; // Break out of the cell index loop to reach the box loop
@@ -642,26 +660,49 @@ public:
 				} // End numeral loop
 			} // End of parallel region
 
-			if (flag)
-				return false;
+			if (state > 0)
+				return state == 1 ? true : false;
 
 			// Scan for cells with only a single note
-			for (short l_col = 0; l_col < N; l_col++) {
-				for (short l_row = 0; l_row < N; l_row++) {
+#pragma omp parallel
+			{
+				int threadID = omp_get_thread_num();
+				if (threadID == 0)
+					state = (isBoardSolved() ? 1 : 0);
 
-					short numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
-					if (numeral > 0) {
-						m_Board[l_col][l_row] = numeral;
-						wipeNotations(l_col, l_row, numeral);
-						print();
+				for (short l_col = threadID; l_col < N && state <= 0; l_col += nthreads) {
+					for (short l_row = 0; l_row < N && state <= 0; l_row++) {
+						if (m_Board[l_col][l_row] > 0)
+							continue;
+						short numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
+						if (numeral == 0) {
+							for (short index = 0; index < N; index++)
+								if (m_Board[l_col][l_row].canBe[index] == true)
+									m_Board[l_col][l_row].canBe[index] = checkIfSafe(l_col, l_row, index + 1);
+								else
+									m_Board[l_col][l_row].canBe[index] = false;
+							numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
+						}
+						if (numeral > 0) {
+							m_Board[l_col][l_row] = numeral;
+							wipeNotations(l_col, l_row, numeral);
+							if (threadID == 0) print(); // ENABLES "SLOWMODE"
+						}
 					}
 				}
 			}
-			
-			// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
 
-			counter++;
+			if (state > 0)
+				return state == 1 ? true : false;
 		}
-		return counter < N* (N + 1);
+			
+		// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
+			
+		return state == 1 ? true : false;
 	}
+
+	bool solveBacktrackingSerial() {
+
+	}
+
 };
