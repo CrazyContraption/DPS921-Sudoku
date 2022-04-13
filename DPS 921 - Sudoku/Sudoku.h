@@ -553,93 +553,95 @@ public:
 	/// </summary>
 	bool solveBoardOMP() {
 
-		omp_set_num_threads(8);
-
 		// This counter ensures we don't get stuck trying to solve an impossible sudoku forever
 		int counter = 0;
 		while (!isBoardSolved() && counter < N * (N + 1)) { // Retry for as long as the board isn't solved, and we've tried less than 9*(9 + 1) times.
 
 			bool flag = false;
+			int threads = 8;
+			omp_set_num_threads(threads);
 
 #pragma omp parallel
 			{
 				int master = 0;
 				int threadNumber = omp_get_thread_num();
+				int threadId = omp_get_thread_num();
 
-#pragma omp for
-				for (short box = 0; box <= 8; box++) { // For each segment...
-					for (short numeral = 1; numeral <= 9 && !flag; numeral++) { // For each number from 1 through 9...
+				for (int i = threadId; i < N; i += threads) { // Break each iteration into single threads
+					for (short box = 0; box <= 8; box++) { // For each segment...
+						for (short numeral = 1; numeral <= 9 && !flag; numeral++) { // For each number from 1 through 9...
 
-						if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
-							continue; // Skip this segment, move to the next.
+							if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
+								continue; // Skip this segment, move to the next.
 
-						for (short index = 0; index < N; index++) { // For each cell in the current segment...
+							for (short index = 0; index < N; index++) { // For each cell in the current segment...
 
-							int row = (short)std::floor(box / 3) * 3 + (short)std::floor(index / 3); // Save the derrived row (bleh math)
-							int col = (box % 3) * 3 + (index % 3); // Save the derrived column (bleh math)
-							Cell cell = m_Board[col][row]; // Save the cell locally for faster testing
+								int row = (short)std::floor(box / 3) * 3 + (short)std::floor(index / 3); // Save the derrived row (bleh math)
+								int col = (box % 3) * 3 + (index % 3); // Save the derrived column (bleh math)
+								Cell cell = m_Board[col][row]; // Save the cell locally for faster testing
 
-							if (cell > 0) // If the cell has a number in it already...
-								continue; // Skip this cell, move to the next one
+								if (cell > 0) // If the cell has a number in it already...
+									continue; // Skip this cell, move to the next one
 
-							if (usedInLine(row, numeral, col)) { // If the number exists in the same row already...
-								index += 2 - (index % 3); // Skip to the next row (math just skips the index to the start of the next row of the segment (0,3,6)
-								continue;
+								if (usedInLine(row, numeral, col)) { // If the number exists in the same row already...
+									index += 2 - (index % 3); // Skip to the next row (math just skips the index to the start of the next row of the segment (0,3,6)
+									continue;
+								}
+								if (usedInLine(col, numeral, row, true)) // If the number exists in the same column already...
+									continue; // Skip this cell, move to the next one
+
+								/// Okay, things get complicated from here...
+								/// Code beyond this point only executes if we have a spot where a number can go, and it needs to go somewhere in the current segment (3x3 box)
+								/// HOWEVER, from here we must determine if the spot is the only spot available, and place it or make a note of it depending on that
+
+								int countValid = 0; // Keep track of how many spots our number can go within the segment
+
+								// Keep track of the most recent valid rows & columns, so that if there's only one valid spot, we can go back and fill it in!
+								short lastValidRow = -1;
+								short lastValidCol = -1;
+
+								for (short l_row = row - (row % 3); l_row <= row - (row % 3) + 2; l_row++) { // For each row in the segment...
+									for (short l_col = col - (col % 3); l_col <= col - (col % 3) + 2; l_col++) { // For each column in the segment...
+
+										if (m_Board[l_col][l_row] > 0) // If the spot is filled in already...
+											continue; // Skip this spot, move to the next one
+
+										if (checkIfSafe(l_col, l_row, numeral)) { // Is this empty cell safe for this number...?
+											countValid++; // Add to the number of -per-segment valid spots for this numeral
+
+											// Save this location for later!
+											lastValidRow = l_row;
+											lastValidCol = l_col;
+
+											m_Board[lastValidCol][lastValidRow].note(numeral); // Add a note to this cell, letting the board remember that this numeral is possible for this position
+
+											/// print(); // ENABLES "SLOWMODE"
+										}
+
+									} // End column loop
+								} // End row loop
+
+								if (countValid == 0) { // No valid spots for this number in the segment...?
+									flag = true; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+									box = -1;
+									numeral = N + 1;
+									break; // ABORT MISSION
+								}
+
+								if (countValid == 1) { // Did we find only one valid spot for this numeral...?
+									m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
+									wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
+									//if(threadNumber == master) print(); // Print out the updates
+									box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
+									numeral = N + 1;
+									break; // Break out of the cell index loop to reach the box loop
+								}
+								else // Multiple valid cells...?
+									continue; // We've already made a note of them all... there's nothing more we can do here... :(
 							}
-							if (usedInLine(col, numeral, row, true)) // If the number exists in the same column already...
-								continue; // Skip this cell, move to the next one
-
-							/// Okay, things get complicated from here...
-							/// Code beyond this point only executes if we have a spot where a number can go, and it needs to go somewhere in the current segment (3x3 box)
-							/// HOWEVER, from here we must determine if the spot is the only spot available, and place it or make a note of it depending on that
-
-							int countValid = 0; // Keep track of how many spots our number can go within the segment
-
-							// Keep track of the most recent valid rows & columns, so that if there's only one valid spot, we can go back and fill it in!
-							short lastValidRow = -1;
-							short lastValidCol = -1;
-
-							for (short l_row = row - (row % 3); l_row <= row - (row % 3) + 2; l_row++) { // For each row in the segment...
-								for (short l_col = col - (col % 3); l_col <= col - (col % 3) + 2; l_col++) { // For each column in the segment...
-
-									if (m_Board[l_col][l_row] > 0) // If the spot is filled in already...
-										continue; // Skip this spot, move to the next one
-
-									if (checkIfSafe(l_col, l_row, numeral)) { // Is this empty cell safe for this number...?
-										countValid++; // Add to the number of -per-segment valid spots for this numeral
-
-										// Save this location for later!
-										lastValidRow = l_row;
-										lastValidCol = l_col;
-
-										m_Board[lastValidCol][lastValidRow].note(numeral); // Add a note to this cell, letting the board remember that this numeral is possible for this position
-
-										/// print(); // ENABLES "SLOWMODE"
-									}
-
-								} // End column loop
-							} // End row loop
-
-							if (countValid == 0) { // No valid spots for this number in the segment...?
-								flag = true; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
-								box = -1;
-								numeral = N + 1;
-								break; // ABORT MISSION
-							}
-
-							if (countValid == 1) { // Did we find only one valid spot for this numeral...?
-								m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
-								wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
-								//if(threadNumber == master) print(); // Print out the updates
-								box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
-								numeral = N + 1;
-								break; // Break out of the cell index loop to reach the box loop
-							}
-							else // Multiple valid cells...?
-								continue; // We've already made a note of them all... there's nothing more we can do here... :(
-						}
-					} // End segment loop
-				} // End numeral loop
+						} // End segment loop
+					} // End numeral loop
+				} // End of loop breaking each iteration into single threads
 			} // End of parallel region
 
 			if (flag)
