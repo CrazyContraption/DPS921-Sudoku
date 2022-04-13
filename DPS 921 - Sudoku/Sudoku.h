@@ -3,7 +3,8 @@
 #include <chrono>    // Seeding
 #include <iostream>  // IO
 #include <math.h>    // Rounding
-#include <omp.h>
+#include <sstream>   // StringStream
+#include <omp.h>     // OpenMP
 
 // Sue me for using a global constant
 #define N 9
@@ -324,20 +325,21 @@ public:
 	/// <para>Outputs to cout, clears and then populates from the class variables.</para>
 	/// </summary>
 	void print() {
-		system("CLS");
-		std::cout << std::endl;
+		std::stringstream ss;
+
+		ss << std::endl;
 		for (short row_index = 0; row_index < N + 1; row_index++) {
 			if (row_index % 3 == 0)
-				std::cout << "  +-------+-------+-------+" << std::endl;
+				ss << "  +-------+-------+-------+" << std::endl;
 			if (row_index >= N)
 				break;
-			std::cout << ' ';
+			ss << ' ';
 			for (short col_index = 0; col_index < N; col_index++) {
 				if (col_index % 3 == 0)
-					std::cout << " |";
-				std::cout << ' ';
+					ss << " |";
+				ss << ' ';
 				if (m_Board[col_index][row_index] > 0)
-					std::cout << m_Board[col_index][row_index];
+					ss << m_Board[col_index][row_index];
 				else if (m_Board[col_index][row_index].canBe[0] +
 					m_Board[col_index][row_index].canBe[1] +
 					m_Board[col_index][row_index].canBe[2] +
@@ -347,13 +349,17 @@ public:
 					m_Board[col_index][row_index].canBe[6] +
 					m_Board[col_index][row_index].canBe[7] +
 					m_Board[col_index][row_index].canBe[8] > 0)
-					std::cout << '~';
+					ss << '~';
 				else
-					std::cout << '-';
+					ss << '-';
 			}
-			std::cout << " |" << std::endl;
+			ss << " |" << std::endl;
 		}
-		std::cout << std::endl;
+		ss << std::endl;
+
+		system("CLS");
+
+		std::cout << ss.rdbuf();
 	}
 
 	/// <summary>Tests if the board is in a solved state.
@@ -701,8 +707,57 @@ public:
 		return state == 1 ? true : false;
 	}
 
-	bool solveBacktrackingSerial() {
-
+	bool solveBacktrackingSerial(short index = 0) {
+		if (index > N * N + 1)
+			return true;
+		short col = index % 9;
+		short row = (short)std::floor(index / 9);
+		print();
+		if (m_Board[col][row] > 0)
+			return solveBacktrackingSerial(index + 1);
+		else
+			for (short numeral = 1; numeral <= N; numeral++) {
+				if (checkIfSafe(col, row, numeral)) {
+					m_Board[col][row] = numeral;
+					if (solveBacktrackingSerial(index + 1)) {
+						return true;
+					}
+					m_Board[col][row] = 0;
+				}
+			}
+		return false;
 	}
 
+	////////////////////////
+	///                  ///
+	///  BAD BROKEN BOI  ///
+	///                  ///
+	bool solveBacktrackingOMP(int nthreads = 1, short index = 0) {
+		if (index > N * N + 1)
+			return true;
+		short col = index % 9;
+		short row = (short)std::floor(index / 9);
+		print();
+		if (m_Board[col][row] > 0)
+			return solveBacktrackingOMP(nthreads, index + 1);
+		else {
+			omp_set_num_threads(nthreads);
+			bool flag = false;
+	#pragma omp parallel
+				{
+					int threadID = omp_get_thread_num();
+					for (short numeral = threadID + 1; numeral <= N && !flag; numeral += nthreads) {
+						if (checkIfSafe(col, row, numeral)) {
+							m_Board[col][row] = numeral;
+							if (solveBacktrackingOMP(nthreads, index + 1)) {
+								flag = true;
+							}
+							m_Board[col][row] = 0;
+						}
+				}
+			}
+			return flag;
+		}
+		return false;
+	}
 };

@@ -39,10 +39,12 @@ int main(int argc, char* argv[]) {
     
     Timer timer = Timer();
     timer.start();
-    if (threads < 1) {
+    if (threads < 0) {
+        myGame.solveBacktrackingSerial();
+    } if (threads == 0) {
         boardValid = myGame.solveNotationSerial();
     } else {
-        boardValid = myGame.solveNotationOMP(threads);
+        boardValid = myGame.solveNotationOMP(threads); // myGame.solveBacktrackingOMP(threads); /// BAD BOI
     }
     timer.stop();
 
