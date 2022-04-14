@@ -53,13 +53,17 @@ int main(int argc, char* argv[]) {
     bool solved = myGame.isBoardSolved();
     bool valid = myGame.isBoardValid();
 
+    std::cout.sync_with_stdio(false);
+
     std::cout
         << "  Solvable:  " << (boardValid ? "YES" : "NOT ENOUGH INFORMATION") << std::endl
         << "  Status:    " << (solved ? "Done" : "Unsolved") << std::endl
         << "  Valid:     " << (valid ? "YES" : "NO") << std::endl
         << std::endl;
-    if (threads < 1)
-        std::cout << "  Method:  Serial" << std::endl;
+    if (threads < 0)
+        std::cout << "  Method:  Serial - Backtracking" << std::endl;
+    else if (threads == 0)
+        std::cout << "  Method:  Serial - Notation" << std::endl;
     else
         std::cout << "  Method:  OMP - " << threads << " thread" << (threads > 1 ? "s" : "") << std::endl;
     std::cout << std::endl
