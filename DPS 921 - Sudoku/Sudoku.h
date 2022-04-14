@@ -324,7 +324,7 @@ public:
 	/// <summary>Prints out the state of the Sudoku board.
 	/// <para>Outputs to cout, clears and then populates from the class variables.</para>
 	/// </summary>
-	void print() {
+	void print(bool lite = false) {
 		std::stringstream ss;
 
 		ss << std::endl;
@@ -338,27 +338,32 @@ public:
 				if (col_index % 3 == 0)
 					ss << " |";
 				ss << ' ';
-				if (m_Board[col_index][row_index] > 0)
-					ss << m_Board[col_index][row_index];
-				else if (m_Board[col_index][row_index].canBe[0] +
-					m_Board[col_index][row_index].canBe[1] +
-					m_Board[col_index][row_index].canBe[2] +
-					m_Board[col_index][row_index].canBe[3] +
-					m_Board[col_index][row_index].canBe[4] +
-					m_Board[col_index][row_index].canBe[5] +
-					m_Board[col_index][row_index].canBe[6] +
-					m_Board[col_index][row_index].canBe[7] +
-					m_Board[col_index][row_index].canBe[8] > 0)
-					ss << '~';
+				if (!lite)
+					if (m_Board[col_index][row_index] > 0)
+						ss << m_Board[col_index][row_index];
+					else if (m_Board[col_index][row_index].canBe[0] +
+						m_Board[col_index][row_index].canBe[1] +
+						m_Board[col_index][row_index].canBe[2] +
+						m_Board[col_index][row_index].canBe[3] +
+						m_Board[col_index][row_index].canBe[4] +
+						m_Board[col_index][row_index].canBe[5] +
+						m_Board[col_index][row_index].canBe[6] +
+						m_Board[col_index][row_index].canBe[7] +
+						m_Board[col_index][row_index].canBe[8] > 0)
+						ss << '~';
+					else
+						ss << '-';
 				else
-					ss << '-';
+					if (m_Board[col_index][row_index] > 0)
+						ss << m_Board[col_index][row_index];
+					else
+						ss << '-';
 			}
 			ss << " |" << std::endl;
 		}
 		ss << std::endl;
 
 		system("CLS");
-
 		std::cout << ss.rdbuf();
 	}
 
@@ -712,7 +717,6 @@ public:
 			return true;
 		short col = index % 9;
 		short row = (short)std::floor(index / 9);
-		print();
 		if (m_Board[col][row] > 0)
 			return solveBacktrackingSerial(index + 1);
 		else
@@ -720,9 +724,11 @@ public:
 				if (checkIfSafe(col, row, numeral)) {
 					m_Board[col][row] = numeral;
 					if (solveBacktrackingSerial(index + 1)) {
+						print(true);
 						return true;
 					}
 					m_Board[col][row] = 0;
+					print(true);
 				}
 			}
 		return false;
@@ -737,7 +743,7 @@ public:
 			return true;
 		short col = index % 9;
 		short row = (short)std::floor(index / 9);
-		print();
+		//print();
 		if (m_Board[col][row] > 0)
 			return solveBacktrackingOMP(nthreads, index + 1);
 		else {
