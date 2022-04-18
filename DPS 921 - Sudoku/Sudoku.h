@@ -10,6 +10,8 @@
 #define N 9
 // That's what I thought... chickens
 
+enum State { IN_PROGRESS, SOLVED, STALEMATE, INVALID };
+
 struct Cell {
 	int numIs = 0; // Number stored in the cell, 0 is "empty"
 	bool canBe[N] = { false, false, false, false, false, false, false, false, false }; // Given an empty cell, what can the cell be?
@@ -64,8 +66,10 @@ private:
 	// The sudoku game board
 	Cell m_Board[N][N];
 
+	State m_State = State::IN_PROGRESS;
+
 	// The set seed, for vanity purposes
-	int m_Seed = -1; // Random by default, positives is considered "set"
+	int m_seed = -1; // Random by default, positives is considered "set"
 	int m_difficulty = -1; // Invalid by default, positives is considered "set"
 
 	/// <summary>Checks if the relative line is fully filled, and contains only one of every digit.
@@ -247,19 +251,16 @@ private:
 	}
 
 public:
-	/// <summary> Checks if a specified cell is safe for a specified number to be valid
-	/// <para> In Sudoku, a number may not share a 3x3 grid, row, or column with itself. This will check all these corresponding cells for duplicates.</para>
-	/// <param name='col'> - Short denoting the desired column to check (0 - 8 inclusive).</param>
-	/// <param name='row'> - Short denoting the desired row to check (0 - 8 inclusive).</param>
-	/// <param name='num'> - Short of the number to check for.</param>
-	/// <returns> Boolean specifying if the cell is considered to be valid/safe for that number to be written to.</returns>
+	/// <summary>
+	/// The static, constant, hard-coded maximum difficulty that a board can be set to. Should stay between 20-30.
 	/// </summary>
-	bool checkIfSafe(short col, short row, short num) {
-		bool vSafe = !usedInLine(col, num, row, true);
-		bool hSafe = !usedInLine(row, num, col, false);
-		bool sSafe = !usedInSegment((std::floor(row / 3) * 3) + std::floor(col / 3), num, (row % 3) * 3 + (col % 3));
-		return m_Board[col][row] == num || (vSafe && hSafe && sSafe);
-	}
+	const static unsigned short MAX_DIFFICULTY = 30;
+
+	/// <summary> The static, constant, hard-coded value of if the program should spend less time printing, and more time number-crunching.
+	/// <para> We keep this on to keep things flashy ;)</para>
+	/// <para> Keep it off for better results though...</para>
+	/// </summary>
+	const static bool DO_DEBUG_PRINTING = false;
 
 	/// <summary> Default constructor which creates an empty Sudoku board.
 	/// <para> Does nothing other than put the board into a safe empty state.</para>
@@ -277,11 +278,11 @@ public:
 	/// </summary>
 	Sudoku(int seed) : Sudoku() {
 		short numbers[N] = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-		m_Seed = seed;
-		if (m_Seed < 0)
+		m_seed = seed;
+		if (m_seed < 0)
 			std::srand(time(NULL));
 		else
-			std::srand((unsigned)m_Seed);
+			std::srand((unsigned)m_seed);
 
 		for (int set = 0; set < 3; set++) {
 			shuffleArray(numbers, N);
@@ -299,8 +300,10 @@ public:
 	/// <seealso cref="isBoardSolved"/>
 	/// </summary>
 	Sudoku(int seed, int difficulty) : Sudoku(seed) {
-		if (difficulty > 20)
-			difficulty = 20; // Prevents things from getting TOO crazy
+		if (difficulty > MAX_DIFFICULTY)
+			difficulty = MAX_DIFFICULTY; // Prevents things from getting TOO crazy
+		else if (difficulty < 0)
+			difficulty = 0;
 		m_difficulty = difficulty;
 
 		for (short iteration = 0; iteration < difficulty; iteration++)
@@ -311,15 +314,19 @@ public:
 			}
 	}
 
-	/// <summary>Gives the current seed of the board
-	/// <returns>Seed integer. -1 is Random.</returns>
+	/// <summary> Checks if a specified cell is safe for a specified number to be valid
+	/// <para> In Sudoku, a number may not share a 3x3 grid, row, or column with itself. This will check all these corresponding cells for duplicates.</para>
+	/// <param name='col'> - Short denoting the desired column to check (0 - 8 inclusive).</param>
+	/// <param name='row'> - Short denoting the desired row to check (0 - 8 inclusive).</param>
+	/// <param name='num'> - Short of the number to check for.</param>
+	/// <returns> Boolean specifying if the cell is considered to be valid/safe for that number to be written to.</returns>
 	/// </summary>
-	int getSeed() { return m_Seed; }
-
-	/// <summary>Gives the current seed of the board
-	/// <returns>Difficulty integer. -1 is unset, max is 20</returns>
-	/// </summary>
-	int getDifficulty() { return m_difficulty; }
+	bool checkIfSafe(short col, short row, short num) {
+		bool vSafe = !usedInLine(col, num, row, true);
+		bool hSafe = !usedInLine(row, num, col, false);
+		bool sSafe = !usedInSegment((std::floor(row / 3) * 3) + std::floor(col / 3), num, (row % 3) * 3 + (col % 3));
+		return m_Board[col][row] == num || (vSafe && hSafe && sSafe);
+	}
 
 	/// <summary>Prints out the state of the Sudoku board.
 	/// <para>Outputs to cout, clears and then populates from the class variables.</para>
@@ -341,18 +348,15 @@ public:
 				if (!lite)
 					if (m_Board[col_index][row_index] > 0)
 						ss << m_Board[col_index][row_index];
-					else if (m_Board[col_index][row_index].canBe[0] +
-						m_Board[col_index][row_index].canBe[1] +
-						m_Board[col_index][row_index].canBe[2] +
-						m_Board[col_index][row_index].canBe[3] +
-						m_Board[col_index][row_index].canBe[4] +
-						m_Board[col_index][row_index].canBe[5] +
-						m_Board[col_index][row_index].canBe[6] +
-						m_Board[col_index][row_index].canBe[7] +
-						m_Board[col_index][row_index].canBe[8] > 0)
-						ss << '~';
-					else
-						ss << '-';
+					else {
+						int notes = m_Board[col_index][row_index].onlyNote();
+						if (notes == 0)
+							ss << '*';
+						else if (notes > 0)
+							ss << '~';
+						else
+							ss << '-';
+					}
 				else
 					if (m_Board[col_index][row_index] > 0)
 						ss << m_Board[col_index][row_index];
@@ -455,18 +459,37 @@ public:
 	/// <para>Solves iteratively to determine if a board can be solved, and if so - how?</para>
 	/// <returns>Boolean denoting if the board is solvable. Failed attemps return false upon realization of an impossible outcome (multiple or no solutions). No solution boards will have empty cells with no notes in them (cell with no value, or possible values)</returns>
 	/// </summary>
-	bool solveNotationSerial() {
+	bool solve(short threads) {
+		omp_set_num_threads(threads);
 
-		short state = (isBoardSolved() ? 1 : 0); // 0 = in progress, 1 = complete, 2 = invalid
-			
-		for (int iteration = 0; iteration < N * N && state == 0; iteration++, state = (isBoardSolved() ? 1 : 0)) {
+		solveNotational();
+		print();
 
-			if (state > 0)
-				return state == 1 ? true : false;
+		if (m_State == State::IN_PROGRESS) {
+			solveFromNotes();
+			print();
 
-			//flag = false;
-			for (short box = 0; box < N && state <= 0; box += 1) { // For each segment...
-				for (short numeral = 1; numeral <= N && state <= 0; numeral++) { // For each number from 1 through 9...
+			if (m_State == State::IN_PROGRESS) {
+				solveBacktracking();
+				print();
+
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/// <summary> Uses a notational algorithm to fill cells logically by their derived values through a sophisticated process of elimination.
+	/// <para> Solves a board for one iteration using a notational process.</para>
+	/// </summary>
+	void solveNotational() {
+		int nThreads = omp_get_max_threads();
+#pragma omp parallel
+		{
+			int threadID = omp_get_thread_num();
+
+			for (short box = 0; box < N && m_State <= State::IN_PROGRESS; box += nThreads) { // For each segment...
+				for (short numeral = threadID + 1; numeral <= N && m_State <= State::IN_PROGRESS; numeral++) { // For each number from 1 through 9...
 
 					if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
 						continue; // Skip this segment, move to the next.
@@ -487,10 +510,6 @@ public:
 						if (usedInLine(col, numeral, row, true)) // If the number exists in the same column already...
 							continue; // Skip this cell, move to the next one
 
-						/// Okay, things get complicated from here...
-						/// Code beyond this point only executes if we have a spot where a number can go, and it needs to go somewhere in the current segment (3x3 box)
-						/// HOWEVER, from here we must determine if the spot is the only spot available, and place it or make a note of it depending on that
-
 						int countValid = 0; // Keep track of how many spots our number can go within the segment
 
 						// Keep track of the most recent valid rows & columns, so that if there's only one valid spot, we can go back and fill it in!
@@ -499,7 +518,6 @@ public:
 
 						for (short l_row = row - (row % 3); l_row <= row - (row % 3) + 2; l_row++) { // For each row in the segment...
 							for (short l_col = col - (col % 3); l_col <= col - (col % 3) + 2; l_col++) { // For each column in the segment...
-
 								if (m_Board[l_col][l_row] > 0) // If the spot is filled in already...
 									continue; // Skip this spot, move to the next one
 
@@ -511,41 +529,44 @@ public:
 									lastValidCol = l_col;
 
 									m_Board[lastValidCol][lastValidRow].note(numeral); // Add a note to this cell, letting the board remember that this numeral is possible for this position
-
-									/// print(); // ENABLES "SLOWMODE"
 								}
 
 							} // End column loop
 						} // End row loop
 
-						if (countValid == 0) { // No valid spots for this number in the segment...?
-							state = 2; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
-							box = -1;
-							numeral = N + 1;
-							break; // ABORT MISSION
-						}
-
 						if (countValid == 1) { // Did we find only one valid spot for this numeral...?
 							m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
 							wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
-							print(); // Print out the updates
-							box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
-							numeral = N + 1;
-							break; // Break out of the cell index loop to reach the box loop
+							if ((threadID == 0 || nThreads <= 1) && DO_DEBUG_PRINTING) // Main thread?
+								print(); // Print out the updates
 						}
-						else // Multiple valid cells...?
-							continue; // We've already made a note of them all... there's nothing more we can do here... :(
+						else // Multiple or no valid cells...?
+							if (countValid == 0) // No valid spots for this number in the segment...?
+								m_State = State::INVALID; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
+							else
+								break; // We've already made a note of them all... there's nothing more we can do here... :(
+						box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
+						numeral = N + 1;
+						break;
 					}
 				} // End segment loop
 			} // End numeral loop
+		} // End of parallel region
+	}
 
-			if (state > 0)
-				return state == 1 ? true : false;
+	/// <summary> Uses the stores notes of the current board in an attempt to eliminate mutually-exclusive cells.
+	/// <para> Has excessive runtime, but can potentially let a notational algorithm continue.</para>
+	/// </summary>
+	void solveFromNotes() {
+		int nThreads = omp_get_max_threads();
+#pragma omp parallel
+		{
+			int threadID = omp_get_thread_num();
+			if (threadID == 0 || nThreads <= 1)
+				m_State = (isBoardSolved() ? State::SOLVED : m_State);
 
-			// Scan for cells with only a single note
-			state = (isBoardSolved() ? 1 : 0);
-			for (short l_col = 0; l_col < N && state <= 0; l_col++) {
-				for (short l_row = 0; l_row < N && state <= 0; l_row++) {
+			for (short l_col = threadID; l_col < N && m_State <= State::IN_PROGRESS; l_col += nThreads) {
+				for (short l_row = 0; l_row < N && m_State <= State::IN_PROGRESS; l_row++) {
 					if (m_Board[l_col][l_row] > 0)
 						continue;
 					short numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
@@ -560,210 +581,42 @@ public:
 					if (numeral > 0) {
 						m_Board[l_col][l_row] = numeral;
 						wipeNotations(l_col, l_row, numeral);
-						print(); // Print out the updates
+						//if ((threadID == 0 || nThreads <= 1) && DO_DEBUG_PRINTING)
+						//	print(); // ENABLES "SLOWMODE"
 					}
 				}
 			}
-
-			if (state > 0)
-				return state == 1 ? true : false;
-
-			// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
 		}
-
-		return state == 1 ? true : false;
 	}
 
-	/// <summary>Uses OMP parallel operations to solve the board by filling in any empty cells
-	/// <para>Same a serial, but much faster (hopefully)</para>
-	/// <returns>Boolean denoting if the board is solvable. Failed attemps return false upon realization of an impossible outcome (multiple or no solutions).</returns>
+	/// <summary> Brute forces empty cells based off of available notes
+	/// <para> Has excessive runtime, but can potentially succeed where notational fails.</para>
+	/// <param name='index'> - Index of the cell to start from. Used for recursion to pickup where it left off.</param>
 	/// </summary>
-	bool solveNotationOMP(int nthreads) {
-
-		short state = 0; // 0 = in progress, 1 = complete, 2 = invalid
-
-		for (int iteration = 0; iteration < N * N && state == 0; iteration++, state = (isBoardSolved() ? 1 : 0)) {
-
-			omp_set_num_threads(nthreads);
-			if (state > 0)
-				return state == 1 ? true : false;
-
-#pragma omp parallel
-			{
-				int threadID = omp_get_thread_num();
-
-				if (threadID == 0)
-					state = (isBoardSolved() ? 1 : 0);
-
-				//flag = false;
-				for (short box = 0; box < N && state <= 0; box += 1) { // For each segment...
-					for (short numeral = threadID + 1; numeral <= N && state <= 0; numeral += nthreads) { // For each number from 1 through 9...
-
-						if (usedInSegment(box, numeral)) // If the number we're trying exists in the segment...
-							continue; // Skip this segment, move to the next.
-
-						for (short index = 0; index < N; index++) { // For each cell in the current segment...
-
-							int row = (short)std::floor(box / 3) * 3 + (short)std::floor(index / 3); // Save the derrived row (bleh math)
-							int col = (box % 3) * 3 + (index % 3); // Save the derrived column (bleh math)
-							Cell cell = m_Board[col][row]; // Save the cell locally for faster testing
-
-							if (cell > 0) // If the cell has a number in it already...
-								continue; // Skip this cell, move to the next one
-
-							if (usedInLine(row, numeral, col)) { // If the number exists in the same row already...
-								index += 2 - (index % 3); // Skip to the next row (math just skips the index to the start of the next row of the segment (0,3,6)
-								continue;
-							}
-							if (usedInLine(col, numeral, row, true)) // If the number exists in the same column already...
-								continue; // Skip this cell, move to the next one
-
-							/// Okay, things get complicated from here...
-							/// Code beyond this point only executes if we have a spot where a number can go, and it needs to go somewhere in the current segment (3x3 box)
-							/// HOWEVER, from here we must determine if the spot is the only spot available, and place it or make a note of it depending on that
-
-							int countValid = 0; // Keep track of how many spots our number can go within the segment
-
-							// Keep track of the most recent valid rows & columns, so that if there's only one valid spot, we can go back and fill it in!
-							short lastValidRow = -1;
-							short lastValidCol = -1;
-
-							for (short l_row = row - (row % 3); l_row <= row - (row % 3) + 2; l_row++) { // For each row in the segment...
-								for (short l_col = col - (col % 3); l_col <= col - (col % 3) + 2; l_col++) { // For each column in the segment...
-
-									if (m_Board[l_col][l_row] > 0) // If the spot is filled in already...
-										continue; // Skip this spot, move to the next one
-
-									if (checkIfSafe(l_col, l_row, numeral)) { // Is this empty cell safe for this number...?
-										countValid++; // Add to the number of -per-segment valid spots for this numeral
-
-										// Save this location for later!
-										lastValidRow = l_row;
-										lastValidCol = l_col;
-
-										m_Board[lastValidCol][lastValidRow].note(numeral); // Add a note to this cell, letting the board remember that this numeral is possible for this position
-
-										//if (threadID == 0) print(); // Print out the updates
-									}
-
-								} // End column loop
-							} // End row loop
-
-							if (countValid == 0) { // No valid spots for this number in the segment...?
-								state = 2; // Board cannot be solved!! (We've found an empty cell that has no possible values for it)
-								box = -1;
-								numeral = N + 1;
-								break; // ABORT MISSION
-							}
-
-							if (countValid == 1) { // Did we find only one valid spot for this numeral...?
-								m_Board[lastValidCol][lastValidRow] = numeral; // Recall the saved position, and set the number!
-								wipeNotations(lastValidCol, lastValidRow, numeral); // Wipe respective notes now that the board's state has permenantly changed!
-								if (threadID == 0) print(); // Print out the updates
-								box = -1; // Tell the segemnt loop to start from the top (-1 because box will be ++'d by the for loop)
-								numeral = N + 1;
-								break; // Break out of the cell index loop to reach the box loop
-							}
-							else // Multiple valid cells...?
-								continue; // We've already made a note of them all... there's nothing more we can do here... :(
-						}
-					} // End segment loop
-				} // End numeral loop
-			} // End of parallel region
-
-			if (state > 0)
-				return state == 1 ? true : false;
-
-			// Scan for cells with only a single note
-#pragma omp parallel
-			{
-				int threadID = omp_get_thread_num();
-				if (threadID == 0)
-					state = (isBoardSolved() ? 1 : 0);
-
-				for (short l_col = threadID; l_col < N && state <= 0; l_col += nthreads) {
-					for (short l_row = 0; l_row < N && state <= 0; l_row++) {
-						if (m_Board[l_col][l_row] > 0)
-							continue;
-						short numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
-						if (numeral == 0) {
-							for (short index = 0; index < N; index++)
-								if (m_Board[l_col][l_row].canBe[index] == true)
-									m_Board[l_col][l_row].canBe[index] = checkIfSafe(l_col, l_row, index + 1);
-								else
-									m_Board[l_col][l_row].canBe[index] = false;
-							numeral = m_Board[l_col][l_row].onlyNote(); // Returns a number > 0 if only a single note exists
-						}
-						if (numeral > 0) {
-							m_Board[l_col][l_row] = numeral;
-							wipeNotations(l_col, l_row, numeral);
-							if (threadID == 0) print(); // ENABLES "SLOWMODE"
-						}
-					}
-				}
-			}
-
-			if (state > 0)
-				return state == 1 ? true : false;
-		}
-			
-		// TODO: Loop through all lines and segments to fill in any single numbers missing? - probably not needed
-			
-		return state == 1 ? true : false;
-	}
-
-	bool solveBacktrackingSerial(short index = 0) {
-		if (index > N * N + 1)
+	bool solveBacktracking(short index = 0) {
+		if (index > N * N + 1) // Base escape case, are we beyond the grid? (index 82)
 			return true;
-		short col = index % 9;
-		short row = (short)std::floor(index / 9);
-		if (m_Board[col][row] > 0)
-			return solveBacktrackingSerial(index + 1);
+		short col = index % 9;						// Assign our column
+		short row = (short)std::floor(index / 9);	// Assign our row
+		if (m_Board[col][row] > 0)					// Is the cell already filled?
+			return solveBacktracking(index + 1);	// Move on to the next cell...
 		else
-			for (short numeral = 1; numeral <= N; numeral++) {
-				if (checkIfSafe(col, row, numeral)) {
-					m_Board[col][row] = numeral;
-					if (solveBacktrackingSerial(index + 1)) {
-						print(true);
-						return true;
-					}
-					m_Board[col][row] = 0;
-					print(true);
-				}
-			}
-		return false;
-	}
+			for (short numeral = 1; numeral <= N; numeral++) {	// Loop through all possible numerals
 
-	////////////////////////
-	///                  ///
-	///  BAD BROKEN BOI  ///
-	///                  ///
-	bool solveBacktrackingOMP(int nthreads = 1, short index = 0) {
-		if (index > N * N + 1)
-			return true;
-		short col = index % 9;
-		short row = (short)std::floor(index / 9);
-		//print();
-		if (m_Board[col][row] > 0)
-			return solveBacktrackingOMP(nthreads, index + 1);
-		else {
-			omp_set_num_threads(nthreads);
-			bool flag = false;
-	#pragma omp parallel
-				{
-					int threadID = omp_get_thread_num();
-					for (short numeral = threadID + 1; numeral <= N && !flag; numeral += nthreads) {
-						if (checkIfSafe(col, row, numeral)) {
-							m_Board[col][row] = numeral;
-							if (solveBacktrackingOMP(nthreads, index + 1)) {
-								flag = true;
-							}
-							m_Board[col][row] = 0;
-						}
+				// TODO: Continue if the current numeral isn't listed on the notes of the cell
+				// Or, just loop through all of the notes only to begin with.
+
+				// Currently unimplemented because we don't trust our ability to reliably denote all notes.
+
+				if (checkIfSafe(col, row, numeral)) {	// Can the current numeral go in the current location?
+					m_Board[col][row] = numeral;		// Place the numeral, assume it's correct, we'll fix it in later otherwise
+					if (DO_DEBUG_PRINTING)
+						print(true);
+					if (solveBacktracking(index + 1))	// Continue to the next cell, returns true only if the base case triggered on cell 82 (board solved)
+						return true;			// Pass along the fact that the board was solved
+					m_Board[col][row] = 0;		// Board was not solved, reset back to a safe state
 				}
 			}
-			return flag;
-		}
-		return false;
+		return false; // This cell hit a dead end, recursively backtrack and try something else...
 	}
 };
