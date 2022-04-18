@@ -25,11 +25,24 @@ int main(int argc, char* argv[]) {
     }
 
     int seed = atoi(argv[1]);
-    int difficulty = atoi(argv[2]);
-    int threads = atoi(argv[3]);
-    bool boardValid = false;
 
-    // TODO: Args stuff for seed + difficulty
+    int difficulty = atoi(argv[2]);
+    if (difficulty > Sudoku::MAX_DIFFICULTY || difficulty < 0) {
+        std::cerr
+            << "Difficulty was outside acceptable ranges: " << difficulty << std::endl
+            << "Expected range: 0 - " << Sudoku::MAX_DIFFICULTY << " (inclusive)" << std::endl;
+        return 1;
+    }
+
+    int threads = atoi(argv[3]);
+    if (threads < 0) {
+        std::cerr
+            << "Difficulty was outside acceptable ranges: " << threads << std::endl
+            << "Expected range: 0 (serial), 1 - " << omp_get_thread_limit() << " (OMP)(inclusive)" << std::endl;
+        return 1;
+    }
+
+    bool boardValid = false;
 
     // Create our object
     Sudoku myGame = Sudoku(seed, difficulty); // 123 is the seed. Set to any integer. Set to negative to disable seed (IE: -1). 0 is the difficulty, which can go up to 20.
@@ -39,13 +52,8 @@ int main(int argc, char* argv[]) {
     
     Timer timer = Timer();
     timer.start();
-    if (threads < 0) {
-        myGame.solveBacktrackingSerial();
-    } if (threads == 0) {
-        boardValid = myGame.solveNotationSerial();
-    } else {
-        boardValid = myGame.solveNotationOMP(threads); // myGame.solveBacktrackingOMP(threads); /// BAD BOI
-    }
+    boardValid = myGame.solve(threads);
+    //boardValid = myGame.solveNotationOMP(threads); // myGame.solveBacktrackingOMP(threads); /// BAD BOI
     timer.stop();
 
     myGame.print();
@@ -74,7 +82,7 @@ int main(int argc, char* argv[]) {
     if (solved && boardValid && valid)
         return 0; // Board was solved, and is valid. Hurray!
     if (!solved && valid)
-        return 0; // Not solved, but valid... Solver is broken in this case.
+        return 2; // Not solved, but valid... Solver is broken in this case.
     if (!boardValid)
         return 4; // Solved... but valid? Something went HORRIBLY wrong if this is the case
     return 3; // Not solved and invalid, standard response for an unsolvable board.
